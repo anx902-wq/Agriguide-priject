@@ -1283,9 +1283,16 @@
                   </p>
                 </div>
               </div>
-              <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
+                <button type="button" id="btnToggleChatVoiceOutput" class="btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.75rem; border-radius: 999px; display: inline-flex; align-items: center; gap: 0.35rem; font-weight: 700; background: #f0fdf4; border: 1.5px solid #86efac; color: #15803d; cursor: pointer;" title="Toggle automatic voice narration">
+                  <span id="voiceOutputIcon">🔊</span>
+                  <span id="voiceOutputText">Voice Audio: ON</span>
+                </button>
+                <button type="button" id="btnStopChatSpeech" class="btn-secondary" style="padding: 0.35rem 0.65rem; font-size: 0.75rem; border-radius: 999px; display: none; align-items: center; gap: 0.25rem; font-weight: 700; color: #dc2626; border: 1.5px solid #fecaca; background: #fef2f2; cursor: pointer;" title="Stop ongoing speech">
+                  <span>⏹️ Stop Voice</span>
+                </button>
                 <span style="font-size: 0.72rem; font-weight: 700; color: #166534; background: #dcfce7; padding: 0.2rem 0.6rem; border-radius: 999px; border: 1px solid #86efac;">
-                  ⚡ Gemini 3.8 / Agronomic Knowledge Engine
+                  ⚡ Gemini AI / Agronomic Voice Engine
                 </span>
               </div>
             </div>
@@ -1294,9 +1301,15 @@
             <div id="pageChatMessagesArea" style="flex: 1; padding: 1.25rem; overflow-y: auto; display: flex; flex-direction: column; gap: 1rem; background: #fafaf9; min-height: 480px; max-height: calc(100vh - 310px);">
               <!-- Bot Welcome Message -->
               <div class="chat-bubble bot" style="max-width: 92%;">
-                <div style="font-weight: 800; color: #15803d; margin-bottom: 0.35rem; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
+                <div style="font-weight: 800; color: #15803d; margin-bottom: 0.35rem; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem;">
                   <span>🌾 AgroCast AI (कृषि मित्र)</span>
-                  <span style="font-size: 0.65rem; color: #166534; background: #dcfce7; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid #86efac; font-weight: 600;">⚡ Active AI Engine</span>
+                  <div style="display: flex; align-items: center; gap: 0.35rem;">
+                    <span style="font-size: 0.65rem; color: #166534; background: #dcfce7; padding: 0.1rem 0.4rem; border-radius: 4px; border: 1px solid #86efac; font-weight: 600;">⚡ Active AI Engine</span>
+                    <button type="button" id="btnWelcomeChatSpeak" class="btn-bubble-speak" style="background: #ffffff; border: 1.5px solid #86efac; color: #15803d; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.03);" title="Listen to welcome message">
+                      <span class="bubble-speak-icon">🔊</span>
+                      <span class="bubble-speak-label">Listen</span>
+                    </button>
+                  </div>
                 </div>
                 <div style="font-size: 0.9rem; color: #1e293b; line-height: 1.55;" id="pageChatWelcomeText">
                   Welcome to the AgroCast AI Agronomist Studio! I can answer any question about Kharif, Rabi, and Zaid crop planning, growing risks, unadvised off-season warnings, major producing states in India, exact registered chemical pesticide formulas, spray timing, and soil agronomy in English and Hindi.

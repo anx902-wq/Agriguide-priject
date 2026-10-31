@@ -438,6 +438,8 @@ const state = {
   // AI Agricultural Chatbot State
   isChatOpen: false,
   chatHistory: [],
+  autoVoiceOutput: true,
+  isSpeaking: false,
 };
 
 // Helper: Localize severe alerts for Hindi
@@ -567,6 +569,8 @@ function setLanguage(langCode) {
   if (state.cropRecommendations.length > 0) {
     renderCropRecommendations(state.cropRecommendations, state.currentSeason);
   }
+  stopChatSpeech();
+  updateVoiceToggleButton();
   updatePrintSheet();
 }
 
@@ -1111,7 +1115,145 @@ function toggleMinimizeChat() {
   }
 }
 
-// Dedicated Page-Level AI Chatbot (Gemini 3.8 Flash + Instant Indian Agronomic Engine)
+// ========================================================
+// TEXT-TO-SPEECH (TTS) AUDIO NARRATION ENGINE
+// Natural bilingual speech output for Indian farmers (Hindi / English)
+// ========================================================
+function sanitizeTextForSpeech(raw) {
+  if (!raw) return '';
+  let clean = raw;
+  clean = clean.replace(/<[^>]*>/g, ' '); // remove html tags
+  clean = clean.replace(/\*\*(.*?)\*\*/g, '$1'); // bold
+  clean = clean.replace(/\*(.*?)\*/g, '$1'); // italic
+  clean = clean.replace(/`([^`]+)`/g, '$1');
+  clean = clean.replace(/^#+\s+/gm, '');
+  clean = clean.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
+  clean = clean.replace(/^[\*\-\•\–\—]\s*/gm, '');
+  // Remove emojis and non-speech symbols
+  clean = clean.replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}]/gu, '');
+  clean = clean.replace(/\n+/g, '. ');
+  clean = clean.replace(/\s+/g, ' ');
+  clean = clean.replace(/\.+/g, '.');
+  return clean.trim();
+}
+
+function stopChatSpeech() {
+  if ('speechSynthesis' in window) {
+    try {
+      window.speechSynthesis.cancel();
+    } catch (e) {
+      console.warn('Speech cancel error:', e);
+    }
+  }
+  state.isSpeaking = false;
+  const stopBtn = document.getElementById('btnStopChatSpeech');
+  if (stopBtn) stopBtn.style.display = 'none';
+
+  document.querySelectorAll('.btn-bubble-speak').forEach((btn) => {
+    const lbl = btn.querySelector('.bubble-speak-label');
+    const icn = btn.querySelector('.bubble-speak-icon');
+    if (lbl) lbl.textContent = state.currentLang === 'hi' ? 'सुनें' : 'Listen';
+    if (icn) icn.textContent = '🔊';
+    btn.dataset.speaking = 'false';
+  });
+}
+
+function speakChatText(text, lang, targetButton) {
+  if (!('speechSynthesis' in window)) {
+    console.warn('Web Speech API Text-to-Speech not supported in this browser.');
+    return;
+  }
+  stopChatSpeech();
+
+  const cleanText = sanitizeTextForSpeech(text);
+  if (!cleanText) return;
+
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+  const isHindi = lang === 'hi' || /[\u0900-\u097F]/.test(cleanText);
+  const targetLang = isHindi ? 'hi-IN' : 'en-IN';
+  utterance.lang = targetLang;
+  utterance.rate = 0.95;
+  utterance.pitch = 1.0;
+
+  const voices = window.speechSynthesis.getVoices();
+  if (voices && voices.length > 0) {
+    const matchedVoice = voices.find((v) => v.lang === targetLang) ||
+      voices.find((v) => v.lang.startsWith(targetLang.split('-')[0])) ||
+      voices.find((v) => (isHindi ? (v.name.includes('Hindi') || v.lang.includes('hi')) : (v.name.includes('India') || v.lang.includes('en-IN'))));
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
+  }
+
+  const stopBtn = document.getElementById('btnStopChatSpeech');
+
+  utterance.onstart = () => {
+    state.isSpeaking = true;
+    if (stopBtn) stopBtn.style.display = 'inline-flex';
+    if (targetButton) {
+      targetButton.dataset.speaking = 'true';
+      const lbl = targetButton.querySelector('.bubble-speak-label');
+      const icn = targetButton.querySelector('.bubble-speak-icon');
+      if (lbl) lbl.textContent = state.currentLang === 'hi' ? 'रोकें' : 'Stop';
+      if (icn) icn.textContent = '⏹️';
+    }
+  };
+
+  utterance.onend = () => {
+    state.isSpeaking = false;
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (targetButton) {
+      targetButton.dataset.speaking = 'false';
+      const lbl = targetButton.querySelector('.bubble-speak-label');
+      const icn = targetButton.querySelector('.bubble-speak-icon');
+      if (lbl) lbl.textContent = state.currentLang === 'hi' ? 'सुनें' : 'Listen';
+      if (icn) icn.textContent = '🔊';
+    }
+  };
+
+  utterance.onerror = (e) => {
+    console.warn('Speech synthesis error:', e);
+    state.isSpeaking = false;
+    if (stopBtn) stopBtn.style.display = 'none';
+    if (targetButton) {
+      targetButton.dataset.speaking = 'false';
+      const lbl = targetButton.querySelector('.bubble-speak-label');
+      const icn = targetButton.querySelector('.bubble-speak-icon');
+      if (lbl) lbl.textContent = state.currentLang === 'hi' ? 'सुनें' : 'Listen';
+      if (icn) icn.textContent = '🔊';
+    }
+  };
+
+  window.speechSynthesis.speak(utterance);
+}
+
+function updateVoiceToggleButton() {
+  const btnToggleVoice = document.getElementById('btnToggleChatVoiceOutput');
+  const voiceIcon = document.getElementById('voiceOutputIcon');
+  const voiceText = document.getElementById('voiceOutputText');
+
+  if (voiceIcon && voiceText) {
+    if (state.autoVoiceOutput) {
+      voiceIcon.textContent = '🔊';
+      voiceText.textContent = state.currentLang === 'hi' ? 'ऑडियो आवाज: चालू' : 'Voice Audio: ON';
+      if (btnToggleVoice) {
+        btnToggleVoice.style.background = '#f0fdf4';
+        btnToggleVoice.style.borderColor = '#86efac';
+        btnToggleVoice.style.color = '#15803d';
+      }
+    } else {
+      voiceIcon.textContent = '🔇';
+      voiceText.textContent = state.currentLang === 'hi' ? 'ऑडियो आवाज: बंद' : 'Voice Audio: OFF';
+      if (btnToggleVoice) {
+        btnToggleVoice.style.background = '#f8fafc';
+        btnToggleVoice.style.borderColor = '#cbd5e1';
+        btnToggleVoice.style.color = '#64748b';
+      }
+    }
+  }
+}
+
+// Dedicated Page-Level AI Chatbot (Gemini 3.1 Flash Lite + Agronomic Engine)
 async function sendPageChatMessage(customText) {
   const input = document.getElementById('pageChatTextInput');
   const messageText = (customText || (input ? input.value : '')).trim();
@@ -1160,7 +1302,7 @@ async function sendPageChatMessage(customText) {
     }
     const data = await res.json();
     const reply = data.reply || (state.currentLang === 'hi' ? 'धन्यवाद! आपकी फसल सुरक्षित रहे।' : 'Thank you for your agronomic question.');
-    const source = data.source || 'Gemini 3.8 Flash AI';
+    const source = data.source || 'Gemini 3.1 Flash Lite AI';
 
     // Store in history
     state.chatHistory.push({ role: 'user', content: messageText });
@@ -1169,20 +1311,28 @@ async function sendPageChatMessage(customText) {
       state.chatHistory = state.chatHistory.slice(-20);
     }
 
-    // Format & display reply
+    // Format & display reply with speak button
     const formattedHtml = formatChatReply(reply);
-    appendPageChatBubble('bot', formattedHtml, source);
+    appendPageChatBubble('bot', formattedHtml, source, reply);
+
+    // Automatic Voice Audio Output if enabled
+    if (state.autoVoiceOutput) {
+      speakChatText(reply, state.currentLang);
+    }
   } catch (err) {
     if (typingEl) typingEl.style.display = 'none';
     console.error('Page chat error:', err);
     const fallbackMsg = state.currentLang === 'hi'
       ? 'माफ़ कीजिए, AI सर्वर से उत्तर प्राप्त करने में अस्थायी समस्या हुई। कृपया पुनः प्रयास करें।'
       : 'Sorry, could not connect to AI agronomist at this moment. Please retry.';
-    appendPageChatBubble('bot', fallbackMsg, 'Offline Fallback');
+    appendPageChatBubble('bot', fallbackMsg, 'Offline Fallback', fallbackMsg);
+    if (state.autoVoiceOutput) {
+      speakChatText(fallbackMsg, state.currentLang);
+    }
   }
 }
 
-function appendPageChatBubble(role, htmlContent, sourceTag) {
+function appendPageChatBubble(role, htmlContent, sourceTag, rawText) {
   const container = document.getElementById('pageChatMessagesArea');
   if (!container) return;
 
@@ -1191,13 +1341,31 @@ function appendPageChatBubble(role, htmlContent, sourceTag) {
   bubble.style.maxWidth = '92%';
 
   if (role === 'bot') {
+    const cleanSpeech = rawText || htmlContent.replace(/<[^>]*>/g, ' ');
     bubble.innerHTML = `
-      <div style="font-weight: 800; color: #15803d; margin-bottom: 0.35rem; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between;">
-        <span>🌾 AgroCast AI (कृषि मित्र)</span>
-        ${sourceTag ? `<span style="font-size: 0.65rem; color: #166534; background: #dcfce7; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid #86efac; font-weight: 600;">⚡ ${escapeChatHtml(sourceTag)}</span>` : ''}
+      <div style="font-weight: 800; color: #15803d; margin-bottom: 0.35rem; font-size: 0.85rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.35rem;">
+        <span style="display: flex; align-items: center; gap: 0.35rem;">🌾 AgroCast AI (कृषि मित्र)</span>
+        <div style="display: flex; align-items: center; gap: 0.35rem;">
+          ${sourceTag ? `<span style="font-size: 0.65rem; color: #166534; background: #dcfce7; padding: 0.15rem 0.5rem; border-radius: 4px; border: 1px solid #86efac; font-weight: 600;">⚡ ${escapeChatHtml(sourceTag)}</span>` : ''}
+          <button type="button" class="btn-bubble-speak" style="background: #ffffff; border: 1.5px solid #86efac; color: #15803d; padding: 0.12rem 0.5rem; border-radius: 999px; font-size: 0.72rem; font-weight: 700; cursor: pointer; display: inline-flex; align-items: center; gap: 0.25rem; box-shadow: 0 1px 2px rgba(0,0,0,0.03);" title="Listen to this advisory audio">
+            <span class="bubble-speak-icon">🔊</span>
+            <span class="bubble-speak-label">${state.currentLang === 'hi' ? 'सुनें' : 'Listen'}</span>
+          </button>
+        </div>
       </div>
       <div style="font-size: 0.9rem; color: #1e293b; line-height: 1.55;">${htmlContent}</div>
     `;
+
+    const speakBtn = bubble.querySelector('.btn-bubble-speak');
+    if (speakBtn) {
+      speakBtn.addEventListener('click', () => {
+        if (speakBtn.dataset.speaking === 'true') {
+          stopChatSpeech();
+        } else {
+          speakChatText(cleanSpeech, state.currentLang, speakBtn);
+        }
+      });
+    }
   } else {
     bubble.innerHTML = `
       <div style="font-weight: 700; opacity: 0.9; margin-bottom: 0.2rem; font-size: 0.78rem;">
@@ -1415,17 +1583,38 @@ function initVoiceInput() {
     };
 
     recognition.onresult = (event) => {
-      const transcript = event.results[0][0].transcript;
-      input.value = transcript;
-      onSendFn(transcript);
+      if (event && event.results && event.results[0] && event.results[0][0]) {
+        const transcript = event.results[0][0].transcript;
+        input.value = transcript;
+        onSendFn(transcript);
+      }
     };
 
     recognition.onerror = (e) => {
-      console.error('Speech recognition error:', e);
+      const errCode = (e && e.error) ? e.error : 'unknown';
+      console.warn(`[AgroCast Voice] Speech recognition event: ${errCode}`);
       isListening = false;
       btn.style.background = '';
       btn.style.color = '';
       btn.classList.remove('animate-pulse');
+
+      if (errCode === 'not-allowed' || errCode === 'service-not-allowed') {
+        showToast(state.currentLang === 'hi' 
+          ? 'माइक्रोफ़ोन अनुमति की आवश्यकता है। कृपया माइक्रोफ़ोन की अनुमति दें।' 
+          : 'Microphone permission required. Please allow microphone access.');
+      } else if (errCode === 'no-speech') {
+        showToast(state.currentLang === 'hi' 
+          ? 'आवाज़ नहीं सुनी गई। कृपया पुनः बोलें।' 
+          : 'No speech detected. Please speak clearly into your mic.');
+      } else if (errCode === 'audio-capture') {
+        showToast(state.currentLang === 'hi'
+          ? 'माइक्रोफ़ोन डिवाइस नहीं मिला। कृपया माइक चेक करें।'
+          : 'No microphone found. Please check your audio input device.');
+      } else if (errCode !== 'aborted') {
+        showToast(state.currentLang === 'hi'
+          ? 'आवाज़ इनपुट इस समय उपलब्ध नहीं है। कृपया लिखकर प्रश्न पूछें।'
+          : 'Voice input momentarily unavailable. Please type your query.');
+      }
     };
 
     recognition.onend = () => {
@@ -1436,14 +1625,21 @@ function initVoiceInput() {
     };
 
     btn.addEventListener('click', () => {
+      // Always stop ongoing speech synthesis when user engages voice microphone
+      stopChatSpeech();
+
       if (isListening) {
-        recognition.stop();
+        try {
+          recognition.stop();
+        } catch (e) {
+          console.warn('[AgroCast Voice] Stop recognition error:', e);
+        }
       } else {
-        recognition.lang = state.currentLang === 'hi' ? 'hi-IN' : 'en-US';
+        recognition.lang = state.currentLang === 'hi' ? 'hi-IN' : 'en-IN';
         try {
           recognition.start();
         } catch (err) {
-          console.warn('Recognition start error:', err);
+          console.warn('[AgroCast Voice] Recognition start error:', err);
         }
       }
     });
@@ -2436,12 +2632,10 @@ async function analyzeCropPicture(dataUrl, sampleCrop, diseaseId) {
   try {
     const payload = {
       image: dataUrl,
+      cropId: state.selectedCropId || 'wheat',
+      sampleCrop: sampleCrop,
+      diseaseId: diseaseId,
     };
-    // Only pass benchmark crop and disease if explicitly testing a known specimen
-    if (diseaseId) {
-      payload.sampleCrop = sampleCrop;
-      payload.diseaseId = diseaseId;
-    }
 
     const res = await fetch('/api/crop-vision/analyze', {
       method: 'POST',
@@ -3392,6 +3586,42 @@ function initApp() {
     });
   }
 
+  // Voice Output Audio Controls (Toggle ON/OFF & Immediate Stop)
+  const btnToggleVoice = document.getElementById('btnToggleChatVoiceOutput');
+  if (btnToggleVoice) {
+    btnToggleVoice.addEventListener('click', () => {
+      state.autoVoiceOutput = !state.autoVoiceOutput;
+      if (!state.autoVoiceOutput) {
+        stopChatSpeech();
+      }
+      updateVoiceToggleButton();
+      showToast(state.autoVoiceOutput
+        ? (state.currentLang === 'hi' ? '🔊 AI चैट आवाज चालू' : '🔊 AI Chat voice narration enabled')
+        : (state.currentLang === 'hi' ? '🔇 AI चैट आवाज बंद' : '🔇 AI Chat voice narration muted'));
+    });
+  }
+
+  const btnStopSpeech = document.getElementById('btnStopChatSpeech');
+  if (btnStopSpeech) {
+    btnStopSpeech.addEventListener('click', () => {
+      stopChatSpeech();
+    });
+  }
+
+  // Welcome message listen button
+  const initialWelcomeSpeakBtn = document.getElementById('btnWelcomeChatSpeak');
+  if (initialWelcomeSpeakBtn) {
+    initialWelcomeSpeakBtn.addEventListener('click', () => {
+      const welcomeEl = document.getElementById('pageChatWelcomeText');
+      const textToSpeak = welcomeEl ? welcomeEl.textContent : '';
+      if (initialWelcomeSpeakBtn.dataset.speaking === 'true') {
+        stopChatSpeech();
+      } else {
+        speakChatText(textToSpeak, state.currentLang, initialWelcomeSpeakBtn);
+      }
+    });
+  }
+
   // Speech Recognition for Mic Button
   initVoiceInput();
 
@@ -3399,6 +3629,7 @@ function initApp() {
   loadCrops();
   loadWeatherData(state.lat, state.lon, state.locationName);
   setLanguage(state.currentLang);
+  updateVoiceToggleButton();
 }
 
 // Kickstart when DOM is ready
